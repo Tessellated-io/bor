@@ -60,8 +60,6 @@ const (
 	// txGatherSlack is the interval used to collate almost-expired announces
 	// with network fetches.
 	txGatherSlack = 100 * time.Millisecond
-
-	nonFastLaneTxDelay = 500 * time.Millisecond
 )
 
 var (
@@ -273,74 +271,72 @@ func (f *TxFetcher) Notify(peer string, hashes []common.Hash) error {
 // direct request replies. The differentiation is important so the fetcher can
 // re-shedule missing transactions as soon as possible.
 func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool) error {
-	enqueue := func(peer string, txs []*types.Transaction, direct bool) error {
-		// Keep track of all the propagated transactions
-		if direct {
-			txReplyInMeter.Mark(int64(len(txs)))
-		} else {
-			txBroadcastInMeter.Mark(int64(len(txs)))
-		}
-
-		// Push all the transactions into the pool, tracking underpriced ones to avoid
-		// re-requesting them and dropping the peer in case of malicious transfers.
-		var (
-			added       = make([]common.Hash, 0, len(txs))
-			duplicate   int64
-			underpriced int64
-			otherreject int64
-		)
-		errs := f.addTxs(txs)
-		for i, err := range errs {
-			// Track the transaction hash if the price is too low for us.
-			// Avoid re-request this transaction when we receive another
-			// announcement.
-			if errors.Is(err, core.ErrUnderpriced) || errors.Is(err, core.ErrReplaceUnderpriced) {
-				for f.underpriced.Cardinality() >= maxTxUnderpricedSetSize {
-					f.underpriced.Pop()
-				}
-				f.underpriced.Add(txs[i].Hash())
-			}
-			// Track a few interesting failure types
-			switch {
-			case err == nil: // Noop, but need to handle to not count these
-
-			case errors.Is(err, core.ErrAlreadyKnown):
-				duplicate++
-
-			case errors.Is(err, core.ErrUnderpriced) || errors.Is(err, core.ErrReplaceUnderpriced):
-				underpriced++
-
-			default:
-				otherreject++
-			}
-			added = append(added, txs[i].Hash())
-		}
-		if direct {
-			txReplyKnownMeter.Mark(duplicate)
-			txReplyUnderpricedMeter.Mark(underpriced)
-			txReplyOtherRejectMeter.Mark(otherreject)
-		} else {
-			txBroadcastKnownMeter.Mark(duplicate)
-			txBroadcastUnderpricedMeter.Mark(underpriced)
-			txBroadcastOtherRejectMeter.Mark(otherreject)
-		}
-		select {
-		case f.cleanup <- &txDelivery{origin: peer, hashes: added, direct: direct}:
-			return nil
-		case <-f.quit:
-			return errTerminated
-		}
-	}
-
+	// Redirect broacasts from non-Fastlane peers to Notify so it can be treated as announcements
+	// Effectively delaying txs by 500ms
 	if f.fastLanePeer != "" && peer != f.fastLanePeer && !direct {
-		go func() {
-			time.Sleep(nonFastLaneTxDelay)
-			enqueue(peer, txs, direct)
-		}()
-		return nil
+		hashes := make([]common.Hash, len(txs))
+		for i, tx := range txs {
+			hashes[i] = tx.Hash()
+		}
+		return f.Notify(peer, hashes)
 	}
 
-	return enqueue(peer, txs, direct)
+	// Keep track of all the propagated transactions
+	if direct {
+		txReplyInMeter.Mark(int64(len(txs)))
+	} else {
+		txBroadcastInMeter.Mark(int64(len(txs)))
+	}
+
+	// Push all the transactions into the pool, tracking underpriced ones to avoid
+	// re-requesting them and dropping the peer in case of malicious transfers.
+	var (
+		added       = make([]common.Hash, 0, len(txs))
+		duplicate   int64
+		underpriced int64
+		otherreject int64
+	)
+	errs := f.addTxs(txs)
+	for i, err := range errs {
+		// Track the transaction hash if the price is too low for us.
+		// Avoid re-request this transaction when we receive another
+		// announcement.
+		if errors.Is(err, core.ErrUnderpriced) || errors.Is(err, core.ErrReplaceUnderpriced) {
+			for f.underpriced.Cardinality() >= maxTxUnderpricedSetSize {
+				f.underpriced.Pop()
+			}
+			f.underpriced.Add(txs[i].Hash())
+		}
+		// Track a few interesting failure types
+		switch {
+		case err == nil: // Noop, but need to handle to not count these
+
+		case errors.Is(err, core.ErrAlreadyKnown):
+			duplicate++
+
+		case errors.Is(err, core.ErrUnderpriced) || errors.Is(err, core.ErrReplaceUnderpriced):
+			underpriced++
+
+		default:
+			otherreject++
+		}
+		added = append(added, txs[i].Hash())
+	}
+	if direct {
+		txReplyKnownMeter.Mark(duplicate)
+		txReplyUnderpricedMeter.Mark(underpriced)
+		txReplyOtherRejectMeter.Mark(otherreject)
+	} else {
+		txBroadcastKnownMeter.Mark(duplicate)
+		txBroadcastUnderpricedMeter.Mark(underpriced)
+		txBroadcastOtherRejectMeter.Mark(otherreject)
+	}
+	select {
+	case f.cleanup <- &txDelivery{origin: peer, hashes: added, direct: direct}:
+		return nil
+	case <-f.quit:
+		return errTerminated
+	}
 }
 
 // Drop should be called when a peer disconnects. It cleans up all the internal
