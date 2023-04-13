@@ -94,7 +94,7 @@ type handlerConfig struct {
 	PeerRequiredBlocks map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
 	checker            ethereum.ChainValidator
 
-	fastLanePeer string
+	fastLanePeerId string
 }
 
 type handler struct {
@@ -309,7 +309,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		}
 		return p.RequestTxs(hashes)
 	}
-	h.txFetcher = fetcher.NewTxFetcher(h.txpool.Has, h.txpool.AddRemotes, fetchTx, config.fastLanePeer)
+	h.txFetcher = fetcher.NewTxFetcher(h.txpool.Has, h.txpool.AddRemotes, fetchTx, config.fastLanePeerId)
 	h.chainSync = newChainSyncer(h)
 	return h, nil
 }

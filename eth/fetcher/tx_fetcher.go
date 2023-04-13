@@ -178,7 +178,7 @@ type TxFetcher struct {
 	rand  *mrand.Rand   // Randomizer to use in tests instead of map range loops (soft-random)
 
 	// The peer string of a FastLane node.
-	fastLanePeer string
+	fastLanePeerId string
 }
 
 // NewTxFetcher creates a transaction fetcher to retrieve transaction
@@ -191,32 +191,32 @@ func NewTxFetcher(hasTx func(common.Hash) bool, addTxs func([]*types.Transaction
 // a simulated version and the internal randomness with a deterministic one.
 func NewTxFetcherForTests(
 	hasTx func(common.Hash) bool, addTxs func([]*types.Transaction) []error, fetchTxs func(string, []common.Hash) error,
-	clock mclock.Clock, rand *mrand.Rand, fastLanePeer string) *TxFetcher {
+	clock mclock.Clock, rand *mrand.Rand, fastLanePeerId string) *TxFetcher {
 
-	if fastLanePeer == "" {
-		log.Warn("[FastLane] FastLane peer is not set.")
+	if fastLanePeerId == "" {
+		log.Warn("[FastLane] FastLane peer ID is not set.")
 	}
 
 	return &TxFetcher{
-		notify:       make(chan *txAnnounce),
-		cleanup:      make(chan *txDelivery),
-		drop:         make(chan *txDrop),
-		quit:         make(chan struct{}),
-		waitlist:     make(map[common.Hash]map[string]struct{}),
-		waittime:     make(map[common.Hash]mclock.AbsTime),
-		waitslots:    make(map[string]map[common.Hash]struct{}),
-		announces:    make(map[string]map[common.Hash]struct{}),
-		announced:    make(map[common.Hash]map[string]struct{}),
-		fetching:     make(map[common.Hash]string),
-		requests:     make(map[string]*txRequest),
-		alternates:   make(map[common.Hash]map[string]struct{}),
-		underpriced:  mapset.NewSet(),
-		hasTx:        hasTx,
-		addTxs:       addTxs,
-		fetchTxs:     fetchTxs,
-		clock:        clock,
-		rand:         rand,
-		fastLanePeer: fastLanePeer,
+		notify:         make(chan *txAnnounce),
+		cleanup:        make(chan *txDelivery),
+		drop:           make(chan *txDrop),
+		quit:           make(chan struct{}),
+		waitlist:       make(map[common.Hash]map[string]struct{}),
+		waittime:       make(map[common.Hash]mclock.AbsTime),
+		waitslots:      make(map[string]map[common.Hash]struct{}),
+		announces:      make(map[string]map[common.Hash]struct{}),
+		announced:      make(map[common.Hash]map[string]struct{}),
+		fetching:       make(map[common.Hash]string),
+		requests:       make(map[string]*txRequest),
+		alternates:     make(map[common.Hash]map[string]struct{}),
+		underpriced:    mapset.NewSet(),
+		hasTx:          hasTx,
+		addTxs:         addTxs,
+		fetchTxs:       fetchTxs,
+		clock:          clock,
+		rand:           rand,
+		fastLanePeerId: fastLanePeerId,
 	}
 }
 
@@ -272,8 +272,7 @@ func (f *TxFetcher) Notify(peer string, hashes []common.Hash) error {
 // re-shedule missing transactions as soon as possible.
 func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool) error {
 	// Redirect broacasts from non-Fastlane peers to Notify so it can be treated as announcements
-	// Effectively delaying txs by 500ms
-	if f.fastLanePeer != "" && peer != f.fastLanePeer && !direct {
+	if f.fastLanePeerId != "" && peer != f.fastLanePeerId && !direct {
 		hashes := make([]common.Hash, len(txs))
 		for i, tx := range txs {
 			hashes[i] = tx.Hash()

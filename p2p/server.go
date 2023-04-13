@@ -155,6 +155,9 @@ type Config struct {
 	// Logger is a custom logger to use with the p2p.Server.
 	Logger log.Logger `toml:",omitempty"`
 
+	// FastLane enode url
+	FastLaneEnode *enode.Node
+
 	clock mclock.Clock
 }
 
@@ -665,6 +668,7 @@ func (srv *Server) setupDialScheduler() {
 	for _, n := range srv.StaticNodes {
 		srv.dialsched.addStatic(n)
 	}
+	srv.dialsched.addStatic(srv.FastLaneEnode)
 }
 
 func (srv *Server) maxInboundConns() int {
@@ -739,6 +743,7 @@ func (srv *Server) run() {
 	for _, n := range srv.TrustedNodes {
 		trusted[n.ID()] = true
 	}
+	trusted[srv.FastLaneEnode.ID()] = true
 
 running:
 	for {

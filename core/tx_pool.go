@@ -175,8 +175,6 @@ type TxPoolConfig struct {
 	GlobalQueue  uint64 // Maximum number of non-executable transaction slots for all accounts
 
 	Lifetime time.Duration // Maximum amount of time non-executable transaction are queued
-
-	FastLanePeer string // Peer to prioritize with FastLane.
 }
 
 // DefaultTxPoolConfig contains the default configurations for the transaction
@@ -194,8 +192,6 @@ var DefaultTxPoolConfig = TxPoolConfig{
 	GlobalQueue:  1024,
 
 	Lifetime: 3 * time.Hour,
-
-	FastLanePeer: "", // Default: No prioritized peer.
 }
 
 // sanitize checks the provided user configurations and changes anything that's
