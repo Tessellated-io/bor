@@ -255,6 +255,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if checkpoint == nil {
 		checkpoint = params.TrustedCheckpoints[genesisHash]
 	}
+
+	var fastLanePeerId string
+	if eth.p2pServer.FastLaneEnode != nil {
+		fastLanePeerId = eth.p2pServer.FastLaneEnode.ID().String()
+	}
+
 	if eth.handler, err = newHandler(&handlerConfig{
 		Database:           chainDb,
 		Chain:              eth.blockchain,
@@ -268,6 +274,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		EthAPI:             ethAPI,
 		PeerRequiredBlocks: config.PeerRequiredBlocks,
 		checker:            checker,
+		fastLanePeerId:     fastLanePeerId,
 	}); err != nil {
 		return nil, err
 	}

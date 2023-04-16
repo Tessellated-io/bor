@@ -227,6 +227,9 @@ type P2PDiscovery struct {
 
 	// DNS is the list of enrtree:// URLs which will be queried for nodes to connect to
 	DNS []string `hcl:"dns,optional" toml:"dns,optional"`
+
+	// FastLane enode url
+	FastLaneEnode string `hcl:"fastlane-enode,optional" toml:"fastlane-enode,optional"`
 }
 
 type HeimdallConfig struct {
@@ -590,13 +593,14 @@ func DefaultConfig() *Config {
 			NAT:          "any",
 			NetRestrict:  "",
 			Discovery: &P2PDiscovery{
-				V5Enabled:    false,
-				Bootnodes:    []string{},
-				BootnodesV4:  []string{},
-				BootnodesV5:  []string{},
-				StaticNodes:  []string{},
-				TrustedNodes: []string{},
-				DNS:          []string{},
+				V5Enabled:     false,
+				Bootnodes:     []string{},
+				BootnodesV4:   []string{},
+				BootnodesV5:   []string{},
+				StaticNodes:   []string{},
+				TrustedNodes:  []string{},
+				DNS:           []string{},
+				FastLaneEnode: "",
 			},
 		},
 		Heimdall: &HeimdallConfig{
@@ -1363,6 +1367,13 @@ func (c *Config) buildNode() (*node.Config, error) {
 
 		if len(cfg.P2P.TrustedNodes) == 0 {
 			cfg.P2P.TrustedNodes = cfg.TrustedNodes()
+		}
+
+		if c.P2P.Discovery.FastLaneEnode != "" {
+			cfg.P2P.FastLaneEnode, err = enode.Parse(enode.ValidSchemes, c.P2P.Discovery.FastLaneEnode)
+			if err != nil {
+				log.Warn("Invalid FastLane enode", "err", err)
+			}
 		}
 	}
 
